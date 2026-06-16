@@ -1,7 +1,3 @@
-# Bare minimum requirements - ONLY what's needed for API + PostgreSQL
-# Total: 12 packages (vs 45 in full version)
-# Image size: ~180MB
-
 # Web Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
