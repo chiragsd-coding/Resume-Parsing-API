@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements-barebone.txt .
 
 # Install minimal packages - no cache to save image size
-RUN pip install --no-cache-dir --no-compile -r requirements.txt
+RUN pip install --no-cache-dir --no-compile -r requirements-barebone.txt
 
 # Copy application
 COPY app/ ./app/
