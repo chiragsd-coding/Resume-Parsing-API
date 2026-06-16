@@ -84,7 +84,7 @@ class RBACService:
             return user
         return check_permission
 
-async def get_current_user(credentials: HTTPAuthCredentials = Depends(security)) -> dict:
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     """Extract user from JWT token."""
     try:
         payload = AuthService.verify_token(credentials.credentials)
