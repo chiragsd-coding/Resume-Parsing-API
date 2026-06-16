@@ -1,0 +1,434 @@
+openapi: 3.0.0
+info:
+  title: ATS Platform API
+  version: 1.0.0
+  description: Multi-tenant SaaS Applicant Tracking System with AI-powered matching
+  contact:
+    name: API Support
+    email: support@example.com
+
+servers:
+  - url: https://api.example.com/api/v1
+    description: Production
+  - url: http://localhost:8000/api/v1
+    description: Development
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      tags:
+        - System
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  app:
+                    type: string
+                  version:
+                    type: string
+
+  /resumes/parse:
+    post:
+      summary: Parse single resume
+      tags:
+        - Resumes
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Resume parsed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  resume_id:
+                    type: string
+                  parsed_data:
+                    $ref: '#/components/schemas/ParsedResume'
+                  quota_remaining:
+                    type: integer
+
+  /resumes/{resume_id}:
+    get:
+      summary: Get resume details
+      tags:
+        - Resumes
+      parameters:
+        - in: path
+          name: resume_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Resume details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resume'
+
+  /resumes/bulk-upload:
+    post:
+      summary: Bulk upload resumes
+      tags:
+        - Resumes
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        '200':
+          description: Bulk upload results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BulkUploadResult'
+                  total:
+                    type: integer
+                  success:
+                    type: integer
+
+  /job-descriptions:
+    post:
+      summary: Create job description
+      tags:
+        - Jobs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJobDescription'
+      responses:
+        '200':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobDescription'
+
+  /matches/search:
+    post:
+      summary: Search matching candidates
+      tags:
+        - Matching
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                job_id:
+                  type: string
+      responses:
+        '200':
+          description: Matching results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: string
+                  matches:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Match'
+
+  /interviews/generate-questions:
+    post:
+      summary: Generate interview questions
+      tags:
+        - Interviews
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                job_id:
+                  type: string
+                num_questions:
+                  type: integer
+                  default: 5
+      responses:
+        '200':
+          description: Questions generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: string
+                  questions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InterviewQuestion'
+
+  /copilot/analyze-candidate:
+    post:
+      summary: AI analysis of candidate
+      tags:
+        - Copilot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                candidate_id:
+                  type: string
+                job_id:
+                  type: string
+      responses:
+        '200':
+          description: AI analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidateAnalysis'
+
+  /billing/create-subscription:
+    post:
+      summary: Create subscription
+      tags:
+        - Billing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                plan:
+                  type: string
+                  enum: [free, pro, enterprise]
+      responses:
+        '200':
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+
+  /billing/usage:
+    get:
+      summary: Get usage metrics
+      tags:
+        - Billing
+      responses:
+        '200':
+          description: Usage data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tenant_id:
+                    type: string
+                  usage:
+                    type: object
+
+components:
+  schemas:
+    ParsedResume:
+      type: object
+      properties:
+        raw_text:
+          type: string
+        full_name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        location:
+          type: string
+        skills:
+          type: array
+          items:
+            type: string
+        experience:
+          type: array
+          items:
+            type: string
+        education:
+          type: array
+          items:
+            type: string
+
+    Resume:
+      type: object
+      properties:
+        id:
+          type: string
+        file_name:
+          type: string
+        full_name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        location:
+          type: string
+        skills:
+          type: array
+          items:
+            type: string
+        parsed_data:
+          $ref: '#/components/schemas/ParsedResume'
+
+    CreateJobDescription:
+      type: object
+      required:
+        - job_title
+        - description
+      properties:
+        job_title:
+          type: string
+        company_name:
+          type: string
+        description:
+          type: string
+
+    JobDescription:
+      type: object
+      properties:
+        id:
+          type: string
+        job_title:
+          type: string
+        company_name:
+          type: string
+        required_skills:
+          type: array
+          items:
+            type: string
+        nice_to_have_skills:
+          type: array
+          items:
+            type: string
+        experience_level:
+          type: string
+
+    Match:
+      type: object
+      properties:
+        candidate_id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        overall_score:
+          type: number
+        skill_match_score:
+          type: number
+        experience_match_score:
+          type: number
+
+    InterviewQuestion:
+      type: object
+      properties:
+        question:
+          type: string
+        type:
+          type: string
+          enum: [technical, behavioral, situational]
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+        expected_areas:
+          type: array
+          items:
+            type: string
+
+    CandidateAnalysis:
+      type: object
+      properties:
+        recommendation:
+          type: string
+        fit_summary:
+          type: string
+        strengths:
+          type: array
+          items:
+            type: string
+        concerns:
+          type: array
+          items:
+            type: string
+
+    Subscription:
+      type: object
+      properties:
+        subscription_id:
+          type: string
+        status:
+          type: string
+        current_period_start:
+          type: integer
+        current_period_end:
+          type: integer
+
+    BulkUploadResult:
+      type: object
+      properties:
+        file:
+          type: string
+        status:
+          type: string
+          enum: [success, failed]
+        resume_id:
+          type: string
+        error:
+          type: string
