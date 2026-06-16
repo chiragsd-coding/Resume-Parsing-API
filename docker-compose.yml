@@ -1,184 +1,121 @@
 version: '3.9'
 
+# BARE MINIMUM: API + PostgreSQL only
+# Total resource usage: 0.5 CPU, 512MB RAM
+# Perfect for MVP when starting revenue
+
 services:
-  # API Service
+  # FastAPI Backend - Takes ~0.2 CPU + 150MB RAM
   api:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.minimal
     container_name: ats_api
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://ats_user:ats_password@postgres:5432/ats_db
-      - REDIS_URL=redis://redis:6379/0
-      - QDRANT_URL=http://qdrant:6333
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - DEBUG=False
+      # Database configuration
+      DATABASE_URL=postgresql://ats_user:ats_password@postgres:5432/ats_db
+      SQLALCHEMY_ECHO=false
+      
+      # App config
+      ENVIRONMENT=production
+      DEBUG=false
+      WORKERS=1
+      
+      # Disable everything except basic features
+      ENABLE_OLLAMA=false
+      ENABLE_REDIS=false
+      ENABLE_ELASTICSEARCH=false
+      ENABLE_QDRANT=false
+      ENABLE_MONITORING=false
+      
+      # Auth (minimal)
+      SECRET_KEY=change-this-in-production
+      ALGORITHM=HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES=30
+    
     depends_on:
-      - postgres
-      - redis
-      - qdrant
-      - elasticsearch
-      - ollama
-    networks:
-      - ats_network
+      postgres:
+        condition: service_healthy
+    
     volumes:
       - ./uploads:/app/uploads
+    
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
+      interval: 60s
       timeout: 10s
       retries: 3
+      start_period: 20s
+    
+    restart: unless-stopped
+    
+    # Resource limits: 0.3 CPU + 200MB RAM (leaves 0.2 CPU + 300MB for postgres)
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 200M
+        reservations:
+          cpus: '0.15'
+          memory: 100M
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
-  # PostgreSQL Database
+  # PostgreSQL Database - Takes ~0.2 CPU + 300MB RAM
   postgres:
     image: postgres:16-alpine
     container_name: ats_postgres
+    
     environment:
-      - POSTGRES_USER=ats_user
-      - POSTGRES_PASSWORD=ats_password
-      - POSTGRES_DB=ats_db
+      POSTGRES_USER: ats_user
+      POSTGRES_PASSWORD: ats_password
+      POSTGRES_DB: ats_db
+      POSTGRES_INITDB_ARGS: "-c max_connections=20 -c shared_buffers=64MB"
+    
     ports:
       - "5432:5432"
+    
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql
-    networks:
-      - ats_network
+    
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ats_user -d ats_db"]
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # Redis Cache
-  redis:
-    image: redis:7-alpine
-    container_name: ats_redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - ats_network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Qdrant Vector Database
-  qdrant:
-    image: qdrant/qdrant:v1.7.0
-    container_name: ats_qdrant
-    ports:
-      - "6333:6333"
-    volumes:
-      - qdrant_data:/qdrant/storage
-    networks:
-      - ats_network
-    environment:
-      - QDRANT_API_KEY=qdrant_api_key
-
-  # Elasticsearch
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-    container_name: ats_elasticsearch
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-    ports:
-      - "9200:9200"
-    volumes:
-      - elasticsearch_data:/usr/share/elasticsearch/data
-    networks:
-      - ats_network
-
-  # Ollama LLM Service
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ats_ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    networks:
-      - ats_network
-
-  # Prometheus Monitoring
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: ats_prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-    networks:
-      - ats_network
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-
-  # Grafana Dashboard
-  grafana:
-    image: grafana/grafana:latest
-    container_name: ats_grafana
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
-      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
-    networks:
-      - ats_network
-    depends_on:
-      - prometheus
-
-  # Loki Logging
-  loki:
-    image: grafana/loki:latest
-    container_name: ats_loki
-    ports:
-      - "3100:3100"
-    volumes:
-      - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml
-      - loki_data:/loki
-    networks:
-      - ats_network
-    command: -config.file=/etc/loki/local-config.yaml
-
-  # RabbitMQ Message Queue
-  rabbitmq:
-    image: rabbitmq:3.12-management
-    container_name: ats_rabbitmq
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    environment:
-      - RABBITMQ_DEFAULT_USER=user
-      - RABBITMQ_DEFAULT_PASS=password
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    networks:
-      - ats_network
+      start_period: 10s
+    
+    restart: unless-stopped
+    
+    # Resource limits: 0.2 CPU + 300MB RAM
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 300M
+        reservations:
+          cpus: '0.1'
+          memory: 150M
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
 volumes:
   postgres_data:
-  redis_data:
-  qdrant_data:
-  elasticsearch_data:
-  ollama_data:
-  prometheus_data:
-  grafana_data:
-  loki_data:
-  rabbitmq_data:
+    driver: local
 
-networks:
-  ats_network:
-    driver: bridge
+# Total resource allocation:
+# API:        0.3 CPU + 200MB RAM
+# PostgreSQL: 0.2 CPU + 300MB RAM
+# ─────────────────────────────
+# Total:      0.5 CPU + 500MB RAM ✅ WITHIN LIMITS!
