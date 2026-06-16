@@ -1,0 +1,68 @@
+version: '3.9'
+
+# Minimal setup for 0.5 CPU + 512MB RAM
+# No PostgreSQL, Redis, Qdrant, Elasticsearch, Ollama, Prometheus, Grafana, Loki, RabbitMQ
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.minimal
+    container_name: ats_api_minimal
+    ports:
+      - "8000:8000"
+    environment:
+      # Minimal configuration
+      - DATABASE_TYPE=sqlite  # Use SQLite instead of PostgreSQL
+      - DATABASE_URL=sqlite:///./data/ats.db
+      - REDIS_URL=  # No Redis - in-memory cache only
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - WORKERS=1
+      - LOG_LEVEL=info
+      
+      # Disable heavy services
+      - ENABLE_OLLAMA=false
+      - ENABLE_REDIS=false
+      - ENABLE_ELASTICSEARCH=false
+      - ENABLE_QDRANT=false
+      
+      # Optional: For LLM fallback to API
+      # - OPENAI_API_KEY=sk_test_xxxxx
+      # - OPENAI_MODEL=gpt-3.5-turbo
+    
+    volumes:
+      - ./data:/app/data  # SQLite database file
+      - ./uploads:/app/uploads  # Resume uploads
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    # Resource limits for minimal deployment
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'        # 0.5 CPU cores
+          memory: 512M       # 512MB RAM limit
+        reservations:
+          cpus: '0.25'       # Minimum 0.25 cores
+          memory: 256M       # Minimum 256MB RAM
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# That's it! No PostgreSQL, Redis, Qdrant, etc.
+
+volumes:
+  # Empty - SQLite uses local file storage

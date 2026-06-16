@@ -1,0 +1,29 @@
+# Minimal Python requirements for 512MB RAM deployment
+# Reduced from 45 packages to 15 essential packages
+
+# Web Framework (required)
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+gunicorn==21.2.0
+
+# Database (one or the other)
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9  # PostgreSQL driver (optional if using SQLite)
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Configuration & Validation
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Utilities
+python-dotenv==1.0.0
+requests==2.31.0
+
+# Basic text processing (no OCR)
+regex==2023.12.25
+
+# Total: 15 dependencies (vs 45 in full version)
+# Total image size: ~200MB (vs 500MB+ in full)

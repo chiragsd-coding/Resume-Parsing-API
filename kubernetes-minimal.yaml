@@ -1,0 +1,148 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ats-api-minimal
+  namespace: default
+  labels:
+    app: ats-api-minimal
+    tier: backend
+spec:
+  replicas: 1  # Single replica for minimal resources
+  strategy:
+    type: Recreate  # No rolling updates needed
+  selector:
+    matchLabels:
+      app: ats-api-minimal
+  template:
+    metadata:
+      labels:
+        app: ats-api-minimal
+    spec:
+      containers:
+      - name: ats-api
+        image: ats-platform/api:minimal
+        imagePullPolicy: IfNotPresent
+        
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        
+        # Minimal environment
+        env:
+        - name: DATABASE_TYPE
+          value: "sqlite"
+        - name: DATABASE_URL
+          value: "sqlite:///./data/ats.db"
+        - name: ENVIRONMENT
+          value: "production"
+        - name: DEBUG
+          value: "false"
+        - name: WORKERS
+          value: "1"
+        - name: ENABLE_OLLAMA
+          value: "false"
+        - name: ENABLE_REDIS
+          value: "false"
+        
+        # Resource requests and limits
+        resources:
+          requests:
+            cpu: 250m           # Request 0.25 cores
+            memory: 256Mi       # Request 256MB
+          limits:
+            cpu: 500m           # Limit to 0.5 cores
+            memory: 512Mi       # Limit to 512MB
+        
+        # Liveness probe
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        # Readiness probe
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 2
+        
+        # Volume mounts
+        volumeMounts:
+        - name: data
+          mountPath: /app/data
+        - name: uploads
+          mountPath: /app/uploads
+      
+      # Volumes
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: ats-data-pvc
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: ats-uploads-pvc
+      
+      # Pod restart policy
+      restartPolicy: Always
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ats-api-minimal-service
+  labels:
+    app: ats-api-minimal
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: ats-api-minimal
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ats-data-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi  # 5GB for SQLite database
+  storageClassName: standard
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ats-uploads-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi  # 5GB for resume uploads
+  storageClassName: standard
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ats-config-minimal
+data:
+  WORKERS: "1"
+  ENABLE_OLLAMA: "false"
+  ENABLE_REDIS: "false"
+  ENABLE_ELASTICSEARCH: "false"
